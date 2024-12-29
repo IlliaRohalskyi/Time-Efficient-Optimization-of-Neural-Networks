@@ -1,0 +1,13 @@
+-e .
+black
+isort
+torch
+torchvision
+numpy
+pandas
+pylint
+matplotlib
+tensorflow
+transformers
+cma
+pyswarm
