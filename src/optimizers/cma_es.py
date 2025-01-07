@@ -17,7 +17,12 @@ from src.utility import fitness_function, flatten_weights, unflatten_weights
 
 
 def optimize_with_cma(
-    model, dataloader, max_generations=10, population_size=20, sigma=0.1
+    model,
+    dataloader,
+    task_type="classification",
+    max_generations=10,
+    population_size=20,
+    sigma=0.1,
 ):
     """
     Optimize the weights of a neural network model using the
@@ -39,7 +44,7 @@ def optimize_with_cma(
     for generation in range(max_generations):
         solutions = es.ask()
         fitnesses = [
-            fitness_function(weights, model, dataloader, criterion)
+            fitness_function(weights, model, dataloader, criterion, task_type)
             for weights in solutions
         ]
         es.tell(solutions, fitnesses)

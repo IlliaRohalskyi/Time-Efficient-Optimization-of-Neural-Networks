@@ -83,7 +83,9 @@ class PSO:  # pylint: disable=R0903
         return self.gbest_position
 
 
-def optimize_with_pso(model, dataloader, max_iter=100, n_particles=50):
+def optimize_with_pso(
+    model, dataloader, task_type="classification", max_iter=100, n_particles=50
+):
     """
     Optimize the weights of a neural network model using Particle Swarm Optimization (PSO).
     Args:
@@ -99,7 +101,7 @@ def optimize_with_pso(model, dataloader, max_iter=100, n_particles=50):
     pso = PSO(n_particles, n_params)
 
     def fitness_wrapper(weights):
-        return fitness_function(weights, model, dataloader, criterion)
+        return fitness_function(weights, model, dataloader, criterion, task_type)
 
     best_weights = pso.optimize(fitness_wrapper, max_iter)
     unflatten_weights(model, best_weights)

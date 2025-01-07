@@ -6,9 +6,11 @@ evaluate the fitness of a model, and generate neighboring solutions.
 """
 
 import os
+import warnings
 
 import numpy as np
 import torch
+from torch import nn
 
 
 def get_root():
@@ -67,27 +69,64 @@ def unflatten_weights(model, weights):
         idx += num_params
 
 
-def fitness_function(weights, model, dataloader, criterion):
+def fitness_function(model, dataloader, task_type):
     """
-    Evaluate the fitness of a neural network model
-    by computing the average loss over the provided dataset.
+    Calculates loss (fitness) for classification, segmentation, or detection.
     Args:
-        weights (iterable): Flattened weights to be unflattened and assigned to the model.
-        model (torch.nn.Module): The neural network model to evaluate.
-        dataloader (torch.utils.data.DataLoader): DataLoader providing the dataset for evaluation.
-        criterion (torch.nn.modules.loss._Loss): Compute the loss between outputs and targets.
+        model (nn.Module): The model to evaluate.
+        dataloader (DataLoader): DataLoader for the dataset.
+        task_type (str): One of 'classification', 'segmentation', 'detection'.
     Returns:
-        float: The average loss over all batches in the dataloader.
+        float: Average loss over the dataloader.
     """
-
-    unflatten_weights(model, weights)
     model.eval()
-    total_loss = 0
+    total_loss = 0.0
+    device = next(model.parameters()).device
+    criterion = nn.CrossEntropyLoss()  # Default for classification/segmentation
+
     with torch.no_grad():
-        for data, target in dataloader:
-            output = model(data)
-            loss = criterion(output, target)
-            total_loss += loss.item()
+        for batch in dataloader:
+            if task_type == "classification":
+                # Typical batch: (data, targets)
+                data, target = batch
+                data, target = data.to(device), target.to(device)
+                output = model(data)
+                loss = criterion(output, target)
+                total_loss += loss.item()
+
+            elif task_type == "segmentation":
+                # Typical batch: (data, segmentation_mask)
+                data, mask = batch
+                data, mask = data.to(device), mask.long().to(device)
+                # Segmentation models often return a dict or tensor
+                output = model(data)
+                # If model returns dict (e.g., DeepLab), get 'out'
+                if isinstance(output, dict) and "out" in output:
+                    output = output["out"]
+                # Use cross-entropy by default for segmentation masks
+                loss = criterion(output, mask)
+                total_loss += loss.item()
+
+            elif task_type == "detection":
+                # Typical batch for detection: (images, targets), where targets have bboxes, labels, etc.
+                images, targets = batch
+                images = list(img.to(device) for img in images)
+                targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+                # Detection models usually return loss dict
+                model_out = model(
+                    images, targets
+                )  # e.g. FasterRCNN returns {'loss_classifier', 'loss_box_reg', ...}
+                if isinstance(model_out, dict):
+                    loss = sum(model_out.values())  # sum of all detection losses
+                else:
+                    # In case the model returns something else or just predictions
+                    # default to zero or handle differently
+                    warnings.warn(
+                        "Model output is not a dictionary of losses. Defaulting loss to zero."
+                    )
+                    loss = torch.tensor(0.0, device=device)
+                total_loss += loss.item()
+
     return total_loss / len(dataloader)
 
 
@@ -105,25 +144,44 @@ def generate_neighbor(weights, temperature):
     return weights + perturbation
 
 
-def optimize_backprop(model, dataloader, optimizer, max_iter=1000):
+def optimize_backprop(
+    model, dataloader, optimizer, task_type, max_iter=1000
+):
     """
-    Run a standard backprop training loop on the given model.
-
-    Args:
-        model (torch.nn.Module): The neural network model to be optimized.
-        dataloader (torch.utils.data.DataLoader): DataLoader providing the training data.
-        optimizer (torch.optim.Optimizer): An initialized optimizer instance.
-        max_iter (int, optional): Maximum number of epochs/iterations to train.
-
-    Returns:
-        torch.nn.Module: The trained model.
+    Universal backprop training loop for classification, segmentation, or detection.
     """
-    criterion = torch.nn.CrossEntropyLoss()
+    device = next(model.parameters()).device
+    criterion = nn.CrossEntropyLoss()  # Default for classification/segmentation
+    model.train()
+
     for _ in range(max_iter):
-        for inputs, labels in dataloader:
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
+        for batch in dataloader:
+            if task_type == "classification":
+                data, target = batch
+                data, target = data.to(device), target.to(device)
+                outputs = model(data)
+                loss = criterion(outputs, target)
+
+            elif task_type == "segmentation":
+                data, mask = batch
+                data, mask = data.to(device), mask.long().to(device)
+                outputs = model(data)
+                if isinstance(outputs, dict) and "out" in outputs:
+                    outputs = outputs["out"]
+                loss = criterion(outputs, mask)
+
+            elif task_type == "detection":
+                images, targets = batch
+                images = [img.to(device) for img in images]
+                targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+                loss_dict = model(images, targets)
+                if isinstance(loss_dict, dict):
+                    loss = sum(loss_dict.values())
+                else:
+                    loss = torch.tensor(0.0, device=device)
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
     return model

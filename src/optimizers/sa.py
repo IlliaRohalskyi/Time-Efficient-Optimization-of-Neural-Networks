@@ -21,6 +21,7 @@ from src.utility import (fitness_function, flatten_weights, generate_neighbor,
 def optimize_with_sa(  # pylint: disable=R0913, R0914, R0917
     model,
     dataloader,
+    task_type="classification",
     initial_temp=1.0,
     final_temp=0.01,
     cooling_rate=0.95,
@@ -40,7 +41,9 @@ def optimize_with_sa(  # pylint: disable=R0913, R0914, R0917
     """
     criterion = torch.nn.CrossEntropyLoss()
     current_weights = flatten_weights(model)
-    current_loss = fitness_function(current_weights, model, dataloader, criterion)
+    current_loss = fitness_function(
+        current_weights, model, dataloader, criterion, task_type
+    )
     best_weights = current_weights.copy()
     best_loss = current_loss
 
@@ -49,7 +52,9 @@ def optimize_with_sa(  # pylint: disable=R0913, R0914, R0917
 
     while temp > final_temp and iteration < max_iter:
         neighbor_weights = generate_neighbor(current_weights, temp)
-        neighbor_loss = fitness_function(neighbor_weights, model, dataloader, criterion)
+        neighbor_loss = fitness_function(
+            neighbor_weights, model, dataloader, criterion, task_type
+        )
         delta_loss = neighbor_loss - current_loss
 
         if delta_loss < 0 or np.random.random() < np.exp(-delta_loss / temp):
