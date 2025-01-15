@@ -2,8 +2,10 @@
 black
 datasets
 isort
+scipy
 torch
 torchvision
+torchaudio
 numpy
 pandas
 pylint
@@ -12,3 +14,4 @@ tensorflow
 transformers
 cma
 pyswarm
+scikit-learn

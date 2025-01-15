@@ -2,12 +2,13 @@
 This module provides functionality to optimize the weights of a neural network
 model using the Covariance Matrix Adaptation Evolution Strategy (CMA-ES).
 Functions:
-    optimize_with_cma(model, dataloader, max_generations=10, population_size=20, sigma=0.1):
+    optimize_with_cma(model, train_loader, val_loader, max_generations=10, population_size=20, sigma=0.1):
         Optimize the weights of a neural network model using CMA-ES.
 Example usage:
     model = YourNeuralNetworkModel()
-    dataloader = YourDataLoader()
-    optimized_model = optimize_with_cma(model, dataloader)
+    train_loader = YourTrainDataLoader()
+    val_loader = YourValDataLoader()
+    optimized_model = optimize_with_cma(model, train_loader, val_loader)
 """
 
 import cma
@@ -18,10 +19,10 @@ from src.utility import fitness_function, flatten_weights, unflatten_weights
 
 def optimize_with_cma(
     model,
-    dataloader,
-    task_type="classification",
-    max_generations=10,
-    population_size=20,
+    train_loader,
+    val_loader,
+    max_generations=5,
+    population_size=5,
     sigma=0.1,
 ):
     """
@@ -29,7 +30,8 @@ def optimize_with_cma(
     Covariance Matrix Adaptation Evolution Strategy (CMA-ES).
     Args:
         model (torch.nn.Module): The neural network model to be optimized.
-        dataloader (torch.utils.data.DataLoader): DataLoader providing the training data.
+        train_loader (torch.utils.data.DataLoader): DataLoader providing the training data.
+        val_loader (torch.utils.data.DataLoader): DataLoader providing the validation data.
         max_generations (int, optional): Maximum number of generations for optimization process.
         population_size (int, optional): The population size for the CMA-ES algorithm.
         sigma (float, optional): The initial standard deviation for the CMA-ES algorithm.
@@ -38,13 +40,12 @@ def optimize_with_cma(
     """
 
     initial_weights = flatten_weights(model)
-    criterion = torch.nn.CrossEntropyLoss()
     es = cma.CMAEvolutionStrategy(initial_weights, sigma, {"popsize": population_size})
 
     for generation in range(max_generations):
         solutions = es.ask()
         fitnesses = [
-            fitness_function(weights, model, dataloader, criterion, task_type)
+            fitness_function(weights, model, train_loader)
             for weights in solutions
         ]
         es.tell(solutions, fitnesses)
@@ -56,6 +57,12 @@ def optimize_with_cma(
         if best_fitness < 0.1:
             print(f"Converged at generation {generation + 1}")
             break
+
+        # Validation phase
+        best_weights = es.result.xbest
+        unflatten_weights(model, best_weights)
+        val_loss = fitness_function(best_weights, model, val_loader)
+        print(f"Generation {generation + 1}/{max_generations}, Validation Loss: {val_loss}")
 
     unflatten_weights(model, es.result.xbest)
     return model

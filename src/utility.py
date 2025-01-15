@@ -68,64 +68,35 @@ def unflatten_weights(model, weights):
         )
         idx += num_params
 
-
-def fitness_function(model, dataloader, task_type):
+def fitness_function(weights, model, dataloader):
     """
-    Calculates loss (fitness) for classification, segmentation, or detection.
+    Calculates loss (fitness) for classification.
+    
     Args:
+        weights (list): List of model weights.
         model (nn.Module): The model to evaluate.
         dataloader (DataLoader): DataLoader for the dataset.
-        task_type (str): One of 'classification', 'segmentation', 'detection'.
+    
     Returns:
         float: Average loss over the dataloader.
     """
+    device = next(model.parameters()).device
+    idx = 0
+    for param in model.parameters():
+        num_params = param.numel()
+        param.data = torch.tensor(weights[idx:idx + num_params].reshape(param.shape), dtype=torch.float32, device=device)
+        idx += num_params
+
     model.eval()
     total_loss = 0.0
-    device = next(model.parameters()).device
-    criterion = nn.CrossEntropyLoss()  # Default for classification/segmentation
-
+    criterion = nn.CrossEntropyLoss()
     with torch.no_grad():
         for batch in dataloader:
-            if task_type == "classification":
-                # Typical batch: (data, targets)
-                data, target = batch
-                data, target = data.to(device), target.to(device)
-                output = model(data)
-                loss = criterion(output, target)
-                total_loss += loss.item()
-
-            elif task_type == "segmentation":
-                # Typical batch: (data, segmentation_mask)
-                data, mask = batch
-                data, mask = data.to(device), mask.long().to(device)
-                # Segmentation models often return a dict or tensor
-                output = model(data)
-                # If model returns dict (e.g., DeepLab), get 'out'
-                if isinstance(output, dict) and "out" in output:
-                    output = output["out"]
-                # Use cross-entropy by default for segmentation masks
-                loss = criterion(output, mask)
-                total_loss += loss.item()
-
-            elif task_type == "detection":
-                # Typical batch for detection: (images, targets), where targets have bboxes, labels, etc.
-                images, targets = batch
-                images = list(img.to(device) for img in images)
-                targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-                # Detection models usually return loss dict
-                model_out = model(
-                    images, targets
-                )  # e.g. FasterRCNN returns {'loss_classifier', 'loss_box_reg', ...}
-                if isinstance(model_out, dict):
-                    loss = sum(model_out.values())  # sum of all detection losses
-                else:
-                    # In case the model returns something else or just predictions
-                    # default to zero or handle differently
-                    warnings.warn(
-                        "Model output is not a dictionary of losses. Defaulting loss to zero."
-                    )
-                    loss = torch.tensor(0.0, device=device)
-                total_loss += loss.item()
+            data, target = batch
+            data, target = data.to(device), target.to(device)
+            output = model(data)
+            loss = criterion(output, target)
+            total_loss += loss.item()
 
     return total_loss / len(dataloader)
 
@@ -144,44 +115,45 @@ def generate_neighbor(weights, temperature):
     return weights + perturbation
 
 
-def optimize_backprop(
-    model, dataloader, optimizer, task_type, max_iter=1000
-):
+def optimize_backprop(model, train_loader, val_loader, optimizer, max_iter=5):
     """
-    Universal backprop training loop for classification, segmentation, or detection.
+    Universal backprop training loop for classification.
+    Includes validation after each epoch.
     """
     device = next(model.parameters()).device
-    criterion = nn.CrossEntropyLoss()  # Default for classification/segmentation
+    criterion = nn.CrossEntropyLoss()
     model.train()
 
-    for _ in range(max_iter):
-        for batch in dataloader:
-            if task_type == "classification":
-                data, target = batch
-                data, target = data.to(device), target.to(device)
-                outputs = model(data)
-                loss = criterion(outputs, target)
-
-            elif task_type == "segmentation":
-                data, mask = batch
-                data, mask = data.to(device), mask.long().to(device)
-                outputs = model(data)
-                if isinstance(outputs, dict) and "out" in outputs:
-                    outputs = outputs["out"]
-                loss = criterion(outputs, mask)
-
-            elif task_type == "detection":
-                images, targets = batch
-                images = [img.to(device) for img in images]
-                targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-                loss_dict = model(images, targets)
-                if isinstance(loss_dict, dict):
-                    loss = sum(loss_dict.values())
-                else:
-                    loss = torch.tensor(0.0, device=device)
+    for epoch in range(max_iter):
+        # Training phase
+        model.train()
+        train_loss = 0.0
+        for batch in train_loader:
+            data, target = batch
+            data, target = data.to(device), target.to(device)
+            outputs = model(data)
+            loss = criterion(outputs, target)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+            train_loss += loss.item()
+
+        train_loss /= len(train_loader)
+
+        # Validation phase
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for batch in val_loader:
+                data, target = batch
+                data, target = data.to(device), target.to(device)
+                outputs = model(data)
+                loss = criterion(outputs, target)
+                val_loss += loss.item()
+
+        val_loss /= len(val_loader)
+        print(f"Epoch {epoch + 1}/{max_iter}, Training Loss: {train_loss}, Validation Loss: {val_loss}")
 
     return model
