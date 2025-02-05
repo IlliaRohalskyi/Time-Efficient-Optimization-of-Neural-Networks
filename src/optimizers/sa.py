@@ -15,8 +15,12 @@ Example usage:
 import numpy as np
 import torch
 
-from src.utility import (fitness_function, flatten_weights, generate_neighbor,
-                         unflatten_weights)
+from src.utility import (
+    fitness_function,
+    flatten_weights,
+    generate_neighbor,
+    unflatten_weights,
+)
 
 
 def optimize_with_sa(  # pylint: disable=R0913, R0914, R0917
@@ -26,7 +30,7 @@ def optimize_with_sa(  # pylint: disable=R0913, R0914, R0917
     initial_temp=0.03,
     final_temp=1e-20,
     cooling_rate=0.9,
-    max_iter=100,
+    max_iter=2,
 ):
     """
     Optimize the weights of a neural network model using Simulated Annealing (SA).

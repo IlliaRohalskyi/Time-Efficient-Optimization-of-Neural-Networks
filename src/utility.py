@@ -68,15 +68,16 @@ def unflatten_weights(model, weights):
         )
         idx += num_params
 
+
 def fitness_function(weights, model, dataloader):
     """
     Calculates loss (fitness) for classification.
-    
+
     Args:
         weights (list): List of model weights.
         model (nn.Module): The model to evaluate.
         dataloader (DataLoader): DataLoader for the dataset.
-    
+
     Returns:
         float: Average loss over the dataloader.
     """
@@ -84,7 +85,11 @@ def fitness_function(weights, model, dataloader):
     idx = 0
     for param in model.parameters():
         num_params = param.numel()
-        param.data = torch.tensor(weights[idx:idx + num_params].reshape(param.shape), dtype=torch.float32, device=device)
+        param.data = torch.tensor(
+            weights[idx : idx + num_params].reshape(param.shape),
+            dtype=torch.float32,
+            device=device,
+        )
         idx += num_params
 
     model.eval()
@@ -154,6 +159,8 @@ def optimize_backprop(model, train_loader, val_loader, optimizer, max_iter=5):
                 val_loss += loss.item()
 
         val_loss /= len(val_loader)
-        print(f"Epoch {epoch + 1}/{max_iter}, Training Loss: {train_loss}, Validation Loss: {val_loss}")
+        print(
+            f"Epoch {epoch + 1}/{max_iter}, Training Loss: {train_loss}, Validation Loss: {val_loss}"
+        )
 
     return model

@@ -7,7 +7,7 @@ from torch.optim import Adam
 from src.utility import optimize_backprop
 
 
-def optimize_with_adam(model, train_loader, val_loader, lr=0.001, max_iter=5):
+def optimize_with_adam(model, train_loader, val_loader, lr=0.001, max_iter=2):
     """
     Train a model using the Adam optimizer.
 
@@ -22,4 +22,6 @@ def optimize_with_adam(model, train_loader, val_loader, lr=0.001, max_iter=5):
         torch.nn.Module: The trained model.
     """
     optimizer = Adam(model.parameters(), lr=lr)
-    return optimize_backprop(model, train_loader, val_loader, optimizer, max_iter=max_iter)
+    return optimize_backprop(
+        model, train_loader, val_loader, optimizer, max_iter=max_iter
+    )

@@ -7,7 +7,7 @@ from torch.optim import SGD
 from src.utility import optimize_backprop
 
 
-def optimize_with_sgd(model, train_loader, val_loader, lr=0.01, max_iter=5):
+def optimize_with_sgd(model, train_loader, val_loader, lr=0.01, max_iter=2):
     """
     Train a model using the SGD optimizer.
 

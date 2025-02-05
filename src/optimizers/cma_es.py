@@ -21,7 +21,7 @@ def optimize_with_cma(
     model,
     train_loader,
     val_loader,
-    max_generations=5,
+    max_generations=2,
     population_size=5,
     sigma=0.1,
 ):
@@ -39,30 +39,48 @@ def optimize_with_cma(
         torch.nn.Module: The optimized neural network model.
     """
 
+    device = next(model.parameters()).device
+    model = model.to(device)
     initial_weights = flatten_weights(model)
-    es = cma.CMAEvolutionStrategy(initial_weights, sigma, {"popsize": population_size})
+    es = cma.CMAEvolutionStrategy(
+        initial_weights, sigma, {"popsize": population_size, "CMA_diagonal": True}
+    )
+
+    def fitness_wrapper(weights):
+        with torch.no_grad():
+            weights_tensor = torch.tensor(weights, dtype=torch.float32, device=device)
+            model.train(False)
+            return fitness_function(weights_tensor, model, train_loader)
 
     for generation in range(max_generations):
         solutions = es.ask()
-        fitnesses = [
-            fitness_function(weights, model, train_loader)
-            for weights in solutions
-        ]
+        fitnesses = [fitness_wrapper(weights) for weights in solutions]
         es.tell(solutions, fitnesses)
 
         best_fitness = min(fitnesses)
         print(
             f"Generation {generation + 1}/{max_generations} - Best Fitness: {best_fitness}"
         )
+
         if best_fitness < 0.1:
             print(f"Converged at generation {generation + 1}")
             break
 
-        # Validation phase
         best_weights = es.result.xbest
-        unflatten_weights(model, best_weights)
-        val_loss = fitness_function(best_weights, model, val_loader)
-        print(f"Generation {generation + 1}/{max_generations}, Validation Loss: {val_loss}")
+        best_weights_tensor = torch.tensor(
+            best_weights, dtype=torch.float32, device=device
+        )
 
-    unflatten_weights(model, es.result.xbest)
+        with torch.no_grad():
+            unflatten_weights(model, best_weights_tensor)
+            model.train(False)
+            val_loss = fitness_function(best_weights_tensor, model, val_loader)
+            print(
+                f"Generation {generation + 1}/{max_generations}, Validation Loss: {val_loss}"
+            )
+
+    best_weights_tensor = torch.tensor(
+        es.result.xbest, dtype=torch.float32, device=device
+    )
+    unflatten_weights(model, best_weights_tensor)
     return model

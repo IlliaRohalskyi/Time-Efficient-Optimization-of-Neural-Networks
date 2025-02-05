@@ -15,7 +15,9 @@ Example usage:
 
 import numpy as np
 import torch
+
 from src.utility import fitness_function, unflatten_weights
+
 
 class PSO:
     """
@@ -88,9 +90,8 @@ class PSO:
                 break
         return self.gbest_position
 
-def optimize_with_pso(
-    model, train_loader, val_loader, max_iter=5, n_particles=5
-):
+
+def optimize_with_pso(model, train_loader, val_loader, max_iter=2, n_particles=5):
     """
     Optimize the weights of a neural network model using Particle Swarm Optimization (PSO).
 
@@ -104,18 +105,24 @@ def optimize_with_pso(
     Returns:
         torch.nn.Module: The optimized neural network model.
     """
+    device = next(model.parameters()).device
+    model = model.to(device)
     n_params = sum(p.numel() for p in model.parameters())
     pso = PSO(n_particles, n_params)
 
     def fitness_wrapper(weights):
-        return fitness_function(weights, model, train_loader)
+        with torch.no_grad():
+            weights_tensor = torch.tensor(weights, dtype=torch.float32, device=device)
+            model.train(False)
+            return fitness_function(weights_tensor, model, train_loader)
 
     best_weights = pso.optimize(fitness_wrapper, max_iter)
-    unflatten_weights(model, best_weights)
+    best_weights_tensor = torch.tensor(best_weights, dtype=torch.float32, device=device)
 
-    # Validation phase
-    for iteration in range(max_iter):
-        val_loss = fitness_function(best_weights, model, val_loader)
-        print(f"Iteration {iteration + 1}/{max_iter}, Validation Loss: {val_loss}")
+    with torch.no_grad():
+        unflatten_weights(model, best_weights_tensor)
+        model.train(False)
+        val_loss = fitness_function(best_weights_tensor, model, val_loader)
+        print(f"Iteration {max_iter}, Validation Loss: {val_loss}")
 
     return model
