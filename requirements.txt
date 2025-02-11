@@ -4,6 +4,7 @@ datasets
 gputil
 isort
 scipy
+seaborn
 torch
 torchvision
 torchaudio
