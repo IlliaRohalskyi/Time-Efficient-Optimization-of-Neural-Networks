@@ -1,16 +1,19 @@
 -e .
 black
 datasets
+gputil
 isort
 scipy
 torch
 torchvision
 torchaudio
 numpy
+openpyxl
 pandas
 pylint
 matplotlib
 tensorflow
+torch_optimizer
 transformers
 cma
 pyswarm

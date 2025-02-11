@@ -6,11 +6,18 @@ evaluate the fitness of a model, and generate neighboring solutions.
 """
 
 import os
-import warnings
+import time
 
+import GPUtil
 import numpy as np
+import pandas as pd
+import psutil
 import torch
+from sklearn.metrics import accuracy_score, f1_score
 from torch import nn
+
+from src.datasets.cv import get_cifar10_dataloader, get_cifar100_dataloader
+from src.models.cv import EfficientNetB0, MobileNetV2, ResNet18
 
 
 def get_root():
@@ -120,47 +127,167 @@ def generate_neighbor(weights, temperature):
     return weights + perturbation
 
 
-def optimize_backprop(model, train_loader, val_loader, optimizer, max_iter=5):
+def optimize_backprop(  # pylint: disable=R0913, R0914, R0917, R0915
+    model,
+    train_loader,
+    val_loader,
+    optimizer,
+    max_iter=5,
+    dataset_name="",
+    model_name="",
+    optimizer_name="",
+):
     """
-    Universal backprop training loop for classification.
-    Includes validation after each epoch.
+    Universal backprop training loop for classification with metrics logging.
     """
     device = next(model.parameters()).device
     criterion = nn.CrossEntropyLoss()
-    model.train()
+
+    # Initialize metrics storage
+    metrics = []
 
     for epoch in range(max_iter):
+        epoch_start_time = time.time()
+
         # Training phase
         model.train()
         train_loss = 0.0
+        train_preds = []
+        train_targets = []
+
         for batch in train_loader:
             data, target = batch
             data, target = data.to(device), target.to(device)
-            outputs = model(data)
-            loss = criterion(outputs, target)
 
             optimizer.zero_grad()
-            loss.backward()
+            outputs = model(data)
+            loss = criterion(outputs, target)
+            loss.backward(create_graph=True)
             optimizer.step()
 
             train_loss += loss.item()
+            preds = outputs.argmax(dim=1).cpu().numpy()
+            train_preds.extend(preds)
+            train_targets.extend(target.cpu().numpy())
 
         train_loss /= len(train_loader)
+        train_acc = accuracy_score(train_targets, train_preds)
+        train_f1 = f1_score(train_targets, train_preds, average="macro")
 
         # Validation phase
         model.eval()
         val_loss = 0.0
+        val_preds = []
+        val_targets = []
+
         with torch.no_grad():
             for batch in val_loader:
                 data, target = batch
                 data, target = data.to(device), target.to(device)
                 outputs = model(data)
                 loss = criterion(outputs, target)
+
                 val_loss += loss.item()
+                preds = outputs.argmax(dim=1).cpu().numpy()
+                val_preds.extend(preds)
+                val_targets.extend(target.cpu().numpy())
 
         val_loss /= len(val_loader)
-        print(
-            f"Epoch {epoch + 1}/{max_iter}, Training Loss: {train_loss}, Validation Loss: {val_loss}"
+        val_acc = accuracy_score(val_targets, val_preds)
+        val_f1 = f1_score(val_targets, val_preds, average="macro")
+
+        # Get memory usage
+        gpu = GPUtil.getGPUs()[0]
+        vram_used = gpu.memoryUsed
+        ram_used = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+
+        # Time for epoch
+        epoch_time = time.time() - epoch_start_time
+
+        # Store metrics
+        metrics.append(
+            {
+                "Dataset": dataset_name,
+                "Model": model_name,
+                "Optimizer": optimizer_name,
+                "Epoch": epoch + 1,
+                "Time(s)": epoch_time,
+                "VRAM(MB)": vram_used,
+                "RAM(MB)": ram_used,
+                "Train_Loss": train_loss,
+                "Train_Acc": train_acc,
+                "Train_F1": train_f1,
+                "Val_Loss": val_loss,
+                "Val_Acc": val_acc,
+                "Val_F1": val_f1,
+            }
         )
 
+        print(f"Epoch {epoch + 1}/{max_iter}")
+        print(f"Time: {epoch_time:.2f}s, VRAM: {vram_used}MB, RAM: {ram_used:.1f}MB")
+        print(
+            f"Train - Loss: {train_loss:.4f}, Acc: {train_acc:.4f}, F1: {train_f1:.4f}"
+        )
+        print(f"Val - Loss: {val_loss:.4f}, Acc: {val_acc:.4f}, F1: {val_f1:.4f}")
+
+    df = pd.DataFrame(metrics)
+    excel_path = os.path.join(get_root(), "optimization_metrics.xlsx")
+
+    if not pd.io.common.file_exists(excel_path):
+        df.to_excel(excel_path, index=False)
+    else:
+        with pd.ExcelWriter(excel_path, mode="a", if_sheet_exists="overlay") as writer:
+            existing_df = pd.read_excel(excel_path)
+            pd.concat([existing_df, df]).to_excel(writer, index=False)
+
     return model
+
+
+def get_dataloaders_and_models(batch_size):
+    """
+    Returns a list of data loaders for classification datasets and a list of classification models.
+    Args:
+        batch_size (int): The batch size to be used for the data loaders.
+    Returns:
+        tuple: A tuple containing:
+            - classification_dataloaders (list): A list of tuples where each tuple contains a data
+              loader and the corresponding dataset name.
+            - classification_models (list): A list of classification model classes.
+    """
+
+    classification_dataloaders = [
+        (get_cifar10_dataloader(batch_size=batch_size), "CIFAR10"),
+        (get_cifar100_dataloader(batch_size=batch_size), "CIFAR100"),
+    ]
+
+    classification_models = [
+        ResNet18,
+        MobileNetV2,
+        EfficientNetB0,
+    ]
+    return classification_dataloaders, classification_models
+
+
+def run_optimizer(
+    model,
+    train_loader,
+    val_loader,
+    optimizer,
+    max_iter,
+    dataset_name,
+    model_name,
+    optimizer_name,
+):  # pylint: disable=too-many-arguments, too-many-positional-arguments
+    """
+    Run the optimizer with the given parameters.
+    """
+    return optimize_backprop(
+        model,
+        train_loader,
+        val_loader,
+        optimizer,
+        max_iter,
+        dataset_name,
+        model_name,
+        optimizer_name,
+    )

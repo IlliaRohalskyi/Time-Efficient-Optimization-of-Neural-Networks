@@ -19,7 +19,7 @@ import torch
 from src.utility import fitness_function, unflatten_weights
 
 
-class PSO:
+class PSO:  # pylint: disable=too-few-public-methods
     """
     Particle Swarm Optimization (PSO) algorithm implementation.
 

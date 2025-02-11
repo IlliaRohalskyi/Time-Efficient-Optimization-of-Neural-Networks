@@ -2,7 +2,8 @@
 This module provides functionality to optimize the weights of a neural network
 model using the Covariance Matrix Adaptation Evolution Strategy (CMA-ES).
 Functions:
-    optimize_with_cma(model, train_loader, val_loader, max_generations=10, population_size=20, sigma=0.1):
+    optimize_with_cma(model, train_loader, val_loader, max_generations=10, population_size=20,
+      sigma=0.1):
         Optimize the weights of a neural network model using CMA-ES.
 Example usage:
     model = YourNeuralNetworkModel()
@@ -24,7 +25,7 @@ def optimize_with_cma(
     max_generations=2,
     population_size=5,
     sigma=0.1,
-):
+):  # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
     """
     Optimize the weights of a neural network model using the
     Covariance Matrix Adaptation Evolution Strategy (CMA-ES).

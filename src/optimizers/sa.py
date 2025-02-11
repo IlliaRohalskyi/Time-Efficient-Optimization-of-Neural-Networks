@@ -13,14 +13,9 @@ Example usage:
 """
 
 import numpy as np
-import torch
 
-from src.utility import (
-    fitness_function,
-    flatten_weights,
-    generate_neighbor,
-    unflatten_weights,
-)
+from src.utility import (fitness_function, flatten_weights, generate_neighbor,
+                         unflatten_weights)
 
 
 def optimize_with_sa(  # pylint: disable=R0913, R0914, R0917
@@ -45,7 +40,6 @@ def optimize_with_sa(  # pylint: disable=R0913, R0914, R0917
     Returns:
         torch.nn.Module: The optimized neural network model.
     """
-    criterion = torch.nn.CrossEntropyLoss()
     current_weights = flatten_weights(model)
     current_loss = fitness_function(current_weights, model, train_loader)
     best_weights = current_weights.copy()
@@ -69,7 +63,8 @@ def optimize_with_sa(  # pylint: disable=R0913, R0914, R0917
         temp *= cooling_rate
         iteration += 1
         print(
-            f"Iteration {iteration}, Temperature: {temp:.4f}, Current Loss: {current_loss:.4f}, Best Loss: {best_loss:.4f}"
+            f"Iteration {iteration}, Temperature: {temp:.4f}, "
+            f"Current Loss: {current_loss:.4f}, Best Loss: {best_loss:.4f}"
         )
 
         # Validation phase
